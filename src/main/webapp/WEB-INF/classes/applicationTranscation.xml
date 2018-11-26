@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:util="http://www.springframework.org/schema/util"
+	xmlns:task="http://www.springframework.org/schema/task"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.1.xsd
+	   http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.1.xsd
+	   http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.1.xsd
+	   http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.1.xsd"
+	default-lazy-init="true">
+
+	<description>Spring Configuration</description>
+
+
+    <bean id="sessionFactory"  class="org.springframework.orm.hibernate3.LocalSessionFactoryBean"> 
+        <property name="configLocation" value="classpath:hibernate.cfg.xml" /> 
+        <property name="configurationClass" value="org.hibernate.cfg.AnnotationConfiguration" />
+    </bean>
+    
+	 <bean id="transactionManager" class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+    
+
+     <!--1 每个Bean都有一个代理  start  -->
+     <bean id="userDaoTarget" class="com.bluesky.spring.dao.UserDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+    
+     <bean id="userDao"   class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean"> 
+           <property name="transactionManager" ref="transactionManager" />    
+           <property name="target" ref="userDaoTarget" /> 
+           <property name="proxyInterfaces" value="com.bluesky.spring.dao.GeneratorDao" />
+           <property name="transactionAttributes"> 
+            <props> 
+                <prop key="*">PROPAGATION_REQUIRED</prop>
+            </props> 
+        </property> 
+    </bean> 
+    <!-- 1 每个Bean都有一个代理  end  -->
+
+
+
+    <!--2  所有Bean共享一个代理基类  start   -->
+    <bean id="transactionBase"   class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean"   lazy-init="true" abstract="true"> 
+        <property name="transactionManager" ref="transactionManager" /> 
+        <property name="transactionAttributes"> 
+            <props> 
+                <prop key="*">PROPAGATION_REQUIRED</prop> 
+            </props> 
+        </property> 
+    </bean>   
+
+    <bean id="userDaoTarget" class="com.bluesky.spring.dao.UserDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="userDao" parent="transactionBase" > 
+        <property name="target" ref="userDaoTarget" />  
+    </bean>
+     <!-- 2 所有Bean共享一个代理基类  end   -->
+    
+    
+    
+     <!--3 使用拦截器  start   -->
+     <bean id="transactionInterceptor"   class="org.springframework.transaction.interceptor.TransactionInterceptor"> 
+        <property name="transactionManager" ref="transactionManager" /> 
+        <property name="transactionAttributes"> 
+            <props> 
+                <prop key="*">PROPAGATION_REQUIRED</prop> 
+            </props> 
+        </property> 
+    </bean>
+
+    <bean class="org.springframework.aop.framework.autoproxy.BeanNameAutoProxyCreator"> 
+        <property name="beanNames"> 
+            <list> 
+                <value>*Dao</value>
+            </list> 
+        </property> 
+        <property name="interceptorNames"> 
+            <list> 
+                <value>transactionInterceptor</value> 
+            </list> 
+        </property> 
+    </bean> 
+
+    <bean id="userDao" class="com.bluesky.spring.dao.UserDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+    <!--3  使用拦截器  end   -->
+    
+    
+    
+    
+    <!--4  使用tx标签配置的拦截器  start-->
+    <context:annotation-config />
+    <context:component-scan base-package="com.bluesky" />
+     <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="*" propagation="REQUIRED" />
+        </tx:attributes>
+    </tx:advice>
+
+    <aop:config>
+        <aop:pointcut id="interceptorPointCuts" expression="execution(* com.bluesky.spring.dao.*.*(..))" />
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="interceptorPointCuts" />       
+    </aop:config>     
+    <!--4  使用tx标签配置的拦截器  end-->
+    
+    
+    
+    <!--5  全注解  start-->
+     <context:annotation-config />
+     <context:component-scan base-package="com.bluesky" />
+     <tx:annotation-driven transaction-manager="transactionManager"/>
+    <!--5  全注解 end-->
+    
+</beans>
+
